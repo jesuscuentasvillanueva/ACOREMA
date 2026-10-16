@@ -112,7 +112,7 @@ test('memory game can be completed, reset and quiz grades actual answers',async(
 
 for(const viewport of [{width:1280,height:900},{width:390,height:844}]){
  test(`WCAG automatic checks across representative pages at ${viewport.width}px`,async({page})=>{
-  test.setTimeout(120000);await page.setViewportSize(viewport);
+  test.setTimeout(120000);await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize(viewport);
   for(const slug of ['index','nosotros','materiales','campanas','galeria','juegos','contacto','ballenas']){
    await page.goto(`/${slug}.html`);
    const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
@@ -120,3 +120,70 @@ for(const viewport of [{width:1280,height:900},{width:390,height:844}]){
   }
  });
 }
+
+test('species explorer supports keyboard tabs and links to real campaigns',async({page})=>{
+ await page.goto('/');
+ const tabs=page.getByRole('tablist',{name:'Explorar especies marinas'});
+ await tabs.getByRole('tab',{name:'Bufeos'}).focus();
+ await page.keyboard.press('ArrowRight');
+ await expect(tabs.getByRole('tab',{name:'Pingüinos'})).toBeFocused();
+ await expect(tabs.getByRole('tab',{name:'Pingüinos'})).toHaveAttribute('aria-selected','true');
+ await expect(page.getByRole('tabpanel',{name:'Pingüinos'})).toBeVisible();
+ await expect(page.getByRole('tabpanel',{name:'Bufeos'})).not.toBeVisible();
+ await page.keyboard.press('End');await expect(tabs.getByRole('tab',{name:'Aves marinas'})).toBeFocused();
+ await page.keyboard.press('Home');await expect(tabs.getByRole('tab',{name:'Bufeos'})).toBeFocused();
+ await page.getByRole('tabpanel',{name:'Bufeos'}).getByRole('link').click();
+ await expect(page).toHaveURL(/campanas.html$/);
+});
+
+test('audience recommendations, useful FAQ and reduced motion',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
+ await page.getByRole('button',{name:'Soy docente',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Soy docente',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.locator('#route-status')).toHaveText('Recursos para acercar el mar a tu aula.');
+ await expect(page.locator('#route-cards a').first()).toHaveAttribute('href','./materiales.html');
+ await page.getByRole('button',{name:'Quiero colaborar',exact:true}).click();
+ await expect(page.locator('#route-cards a').last()).toHaveAttribute('href','./contacto.html');
+ await page.locator('.faq-list summary').nth(1).click();
+ await expect(page.locator('.faq-list details').nth(1)).toHaveAttribute('open','');
+ await expect(page.locator('.faq-list details').nth(1)).toContainText('indicando la fuente');
+ await expect(page.locator('html')).not.toHaveClass(/reveal-enabled/);
+});
+
+test('global search finds pages and resources, supports shortcut and restores focus',async({page})=>{
+ await page.goto('/');
+ const open=page.getByRole('button',{name:'Buscar en ACOREMA',exact:true});await open.click();
+ const search=page.getByRole('dialog',{name:'Un mar de respuestas.'});
+ await expect(search).toBeVisible();
+ const input=search.getByLabel('¿Qué quieres descubrir?');
+ await expect(search.locator('.search-results a')).toHaveCount(12);
+ await search.getByRole('button',{name:'Mostrar más resultados'}).click();
+ await expect(search.locator('.search-results a')).toHaveCount(24);
+ await input.fill('pinguino');
+ await expect(search.locator('.search-results a').first()).toBeVisible();
+ await search.getByRole('button',{name:'Páginas',exact:true}).click();
+ await expect(search.locator('.search-results')).toContainText('Un futuro para el pingüino de Humboldt');
+ await search.getByRole('button',{name:'Recursos',exact:true}).click();
+ await expect(search.locator('.search-results a').first()).toHaveAttribute('target','_blank');
+ await input.fill('ningunresultadozzzzz');await expect(search.locator('.search-status')).toContainText('No encontramos resultados');
+ await page.keyboard.press('Escape');await expect(open).toBeFocused();
+ await page.keyboard.press('Control+k');await expect(search).toBeVisible();
+ await search.getByRole('button',{name:'Todo',exact:true}).click();
+ await input.fill('Misión y visión');
+ await search.getByRole('link').first().click();await expect(page).toHaveURL(/mision-vision.html$/);
+ await page.getByRole('button',{name:'Buscar en ACOREMA',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Un mar de respuestas.'})).toBeVisible();
+});
+
+test('search failure offers a retry and accessible mobile dialog',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.route('**/search-index.json',route=>route.abort());
+ await page.goto('/');await page.getByRole('button',{name:'Buscar en ACOREMA',exact:true}).click();
+ await expect(page.locator('.search-status')).toContainText('No pudimos cargar el buscador');
+ await page.getByRole('button',{name:'Cerrar búsqueda'}).click();
+ await page.unroute('**/search-index.json');
+ await page.getByRole('button',{name:'Buscar en ACOREMA',exact:true}).click();
+ await expect(page.locator('.search-results a').first()).toBeVisible();
+ const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+ expect(results.violations).toEqual([]);
+});

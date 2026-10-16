@@ -14,7 +14,9 @@ npm run dev
 
 ## Contenido
 
-- `index.html`: portada.
+- `index.html`: portada con explorador de especies y recomendaciones según el visitante.
+- `src/modern.css` y `src/modern.js`: diseño visual, navegación fija, progreso de lectura, buscador global y mejoras de interacción. Las animaciones respetan `prefers-reduced-motion`.
+- `public/search-index.json`: índice público de páginas y recursos, generado automáticamente y cargado solo al abrir el buscador.
 - `content/official-pages.json`: contenido institucional migrado y sus fuentes.
 - `scripts/generate-pages.mjs`: genera las páginas de contenido y comparte la cabecera y el pie de la portada. Editar el JSON o el generador en lugar de las páginas HTML generadas.
 - `public/images/official/`: archivos originales de la web institucional, incluido el emblema.
@@ -32,7 +34,7 @@ npm run build
 npm test
 ```
 
-La compilación genera primero las páginas y crea el sitio estático en `dist/`. `npm run preview` sirve esa compilación. Las ocho pruebas verifican identidad, navegación entre páginas, enlaces e imágenes internos, pantallas de 320 px sin desbordamiento, búsqueda y filtros, galería con teclado, contacto, audio reproducible, memoria completa y puntuación del cuestionario. Axe revisa ocho tipos de página en escritorio y móvil. La revisión automática no certifica por sí sola conformidad completa con WCAG; no incluye una auditoría manual con lectores de pantalla ni transcripciones de los audios originales.
+La compilación genera primero las páginas y crea el sitio estático en `dist/`. `npm run preview` sirve esa compilación. Las doce pruebas verifican identidad, navegación entre páginas, enlaces e imágenes internos, pantallas de 320 px sin desbordamiento, búsqueda y filtros, galería con teclado, contacto, audio reproducible, memoria completa y puntuación del cuestionario. También se comprueban las pestañas de especies con teclado, las recomendaciones según el visitante, las preguntas frecuentes, el buscador global, el atajo Ctrl/Cmd+K, el retorno del foco y la recuperación tras un fallo de red. Axe revisa ocho tipos de página en escritorio y móvil, además del diálogo de búsqueda. La revisión automática no certifica por sí sola conformidad completa con WCAG; no incluye una auditoría manual con lectores de pantalla ni transcripciones de los audios originales.
 
 Playwright usa `/usr/bin/chromium` cuando existe. En otros equipos ejecutar `npx playwright install chromium` o indicar `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
 

@@ -44,3 +44,5 @@ dialog?.addEventListener('click', event => {
 });
 dialog?.addEventListener('close', () => opener?.focus());
 document.querySelector('#year').textContent = new Date().getFullYear();
+
+import "./modern.js";
