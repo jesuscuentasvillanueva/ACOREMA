@@ -13,6 +13,7 @@ test('official identity, real navigation and keyboard dialog',async({page})=>{
  await page.getByRole('link',{name:'Misión y visión',exact:true}).first().click();
  await expect(page.locator('main')).toContainText('Contribuir a la sostenibilidad marino-costera');
  await page.goto('/');
+ await page.locator('.faq-list summary').filter({hasText:'¿Qué puedo hacer hoy por el mar?'}).click();
  await page.getByRole('button',{name:'Pequeñas acciones, gran cambio'}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
  await page.keyboard.press('Escape');
@@ -113,7 +114,7 @@ test('memory game can be completed, reset and quiz grades actual answers',async(
 for(const viewport of [{width:1280,height:900},{width:390,height:844}]){
  test(`WCAG automatic checks across representative pages at ${viewport.width}px`,async({page})=>{
   test.setTimeout(120000);await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize(viewport);
-  for(const slug of ['index','nosotros','materiales','campanas','galeria','juegos','contacto','ballenas']){
+  for(const slug of ['index','nosotros','mision-vision','materiales','campanas','galeria','juegos','contacto','ballenas']){
    await page.goto(`/${slug}.html`);
    const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
    expect(results.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),slug).toEqual([]);
@@ -186,4 +187,15 @@ test('search failure offers a retry and accessible mobile dialog',async({page})=
  await expect(page.locator('.search-results a').first()).toBeVisible();
  const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
  expect(results.violations).toEqual([]);
+});
+
+test('mission and vision preserve institutional text and turn principles into navigable content',async({page})=>{
+ await page.goto('/mision-vision.html');
+ await expect(page.locator('.purpose-mission')).toContainText('Contribuir a la sostenibilidad marino-costera');
+ await expect(page.locator('.purpose-vision')).toContainText('Queremos ser reconocidos como una organización');
+ const conservation=page.locator('.purpose-details details').nth(1);
+ await conservation.locator('summary').focus();await page.keyboard.press('Enter');
+ await expect(conservation).toHaveAttribute('open','');
+ await expect(conservation.getByRole('link')).toBeVisible();
+ await conservation.getByRole('link').click();await expect(page).toHaveURL(/campanas.html$/);
 });
