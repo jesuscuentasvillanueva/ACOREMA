@@ -1,15 +1,29 @@
-# ACOREMA — propuesta web en español
+# ACOREMA — web en español
 
-Primera versión de una web centrada en las personas: presentación de la organización, líneas de trabajo, contenidos educativos y vías para participar. Diseño adaptable, navegación con teclado, diálogos nativos y tipografías alojadas en el proyecto. Vite, JavaScript y CSS, sin backend ni credenciales.
+Rediseño adaptable de la web de ACOREMA con su emblema oficial, fotografías y contenido institucional. Incluye portada y 28 páginas adicionales: 26 páginas migradas del sitio en español, juegos accesibles y créditos. Vite, JavaScript y CSS; no requiere backend ni secretos.
 
 ## Desarrollo
 
-Requisitos: Node.js 22.12 o posterior (validado con Node 24) y npm.
+Node.js >=22.12 y npm (validado con Node 24).
 
 ```sh
 npm ci
+npm run generate
 npm run dev
 ```
+
+## Contenido
+
+- `index.html`: portada.
+- `content/official-pages.json`: contenido institucional migrado y sus fuentes.
+- `scripts/generate-pages.mjs`: genera las páginas de contenido y comparte la cabecera y el pie de la portada. Editar el JSON o el generador en lugar de las páginas HTML generadas.
+- `public/images/official/`: archivos originales de la web institucional, incluido el emblema.
+- `public/media/`: cuatro spots de radio originales, reproducidos con audio HTML5.
+- `content/source-assets.json`: procedencia de las imágenes.
+- `content/resource-status.json`: comprobación HTTP y tipo de contenido de 158 enlaces oficiales, realizada el 16 de octubre de 2026. Los PDF respondieron como `application/pdf`.
+- `content/MIGRATION.md`: alcance y equivalencias de la migración.
+
+Los documentos y vídeos conservan sus enlaces oficiales y se abren en otra pestaña. Los archivos locales no dependen del sitio anterior para mostrarse. Los materiales históricos conservan sus fechas; no se anuncian actividades pasadas como convocatorias actuales. Los nuevos juegos de memoria y preguntas reemplazan el acceso a los antiguos interactivos que requerían complementos.
 
 ## Validación
 
@@ -18,18 +32,12 @@ npm run build
 npm test
 ```
 
-Las pruebas usan Chromium del sistema cuando existe en `/usr/bin/chromium`. En otro equipo, instalar el navegador con `npx playwright install chromium` o indicar `PLAYWRIGHT_CHROMIUM_EXECUTABLE`. Comprueban la navegación, el menú móvil, todos los diálogos, retorno del foco, ausencia de desbordamiento horizontal y reglas automáticas WCAG A/AA mediante axe. Una auditoría automática no sustituye pruebas manuales con tecnologías de asistencia.
+La compilación genera primero las páginas y crea el sitio estático en `dist/`. `npm run preview` sirve esa compilación. Las ocho pruebas verifican identidad, navegación entre páginas, enlaces e imágenes internos, pantallas de 320 px sin desbordamiento, búsqueda y filtros, galería con teclado, contacto, audio reproducible, memoria completa y puntuación del cuestionario. Axe revisa ocho tipos de página en escritorio y móvil. La revisión automática no certifica por sí sola conformidad completa con WCAG; no incluye una auditoría manual con lectores de pantalla ni transcripciones de los audios originales.
 
-`npm run preview` sirve la compilación de producción. `dist/` puede desplegarse en un alojamiento estático. No se ha publicado esta propuesta.
+Playwright usa `/usr/bin/chromium` cuando existe. En otros equipos ejecutar `npx playwright install chromium` o indicar `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
 
-## Pendiente de revisión editorial
+## Publicación
 
-La web original devolvió HTTP 403 desde el entorno de trabajo. Los textos son una propuesta; deben validarse con ACOREMA antes de publicar. No se han migrado el historial institucional, proyectos específicos, noticias, datos de contacto ni documentos del sitio original. El enlace institucional externo no pudo verificarse desde este entorno.
+`.github/workflows/deploy-pages.yml` instala, compila, prueba y despliega cada actualización de `main` en GitHub Pages. En el repositorio, la fuente de Pages debe ser **GitHub Actions**. Las rutas relativas admiten `/ACOREMA/`. La URL de producción es `https://jesuscuentasvillanueva.github.io/ACOREMA/`.
 
-La imagen principal es conceptual, generada para la propuesta, y no representa una fotografía de campo de ACOREMA. El símbolo de marca y las ilustraciones son provisionales. Sustituirlos por el material institucional aprobado. No se inventan cifras, testimonios, donaciones procesadas ni convocatorias. Las opciones de colaboración explican el estado y remiten al sitio institucional; no recogen datos personales.
-
-Fuentes: DM Sans y Manrope, distribuidas por Fontsource con sus respectivas licencias en `node_modules/@fontsource/`.
-
-## GitHub Pages
-
-El flujo `.github/workflows/deploy-pages.yml` compila y despliega automáticamente cada actualización de `main`. En GitHub, activar **Settings → Pages → Build and deployment → Source: GitHub Actions**. Después, ejecutar **Actions → Publicar en GitHub Pages → Run workflow** si el primer despliegue falló antes de activar Pages. La URL efectiva aparece en el resultado del despliegue; no asumir que está publicada hasta comprobarla. Los recursos usan rutas relativas para admitir el subdirectorio `/ACOREMA/`.
+Fuentes: DM Sans y Manrope mediante Fontsource, con licencias incluidas en sus paquetes. Identidad, fotografías, documentos y audios: ACOREMA y los titulares indicados en los materiales. El sitio no incorpora seguimiento ni recoge formularios personales.

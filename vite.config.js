@@ -1,4 +1,12 @@
 import { defineConfig } from 'vite';
+import { readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-// Relative asset paths support both root domains and GitHub Pages project paths.
-export default defineConfig({ base: './' });
+export default defineConfig({
+  base: './',
+  build: {
+    rollupOptions: {
+      input: Object.fromEntries(readdirSync('.').filter(file => file.endsWith('.html')).map(file => [file.replace('.html', ''), resolve(file)])),
+    },
+  },
+});

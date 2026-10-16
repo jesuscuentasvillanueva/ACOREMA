@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "playwright test"
+    "test": "playwright test",
+    "generate": "node scripts/generate-pages.mjs",
+    "prebuild": "npm run generate"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",

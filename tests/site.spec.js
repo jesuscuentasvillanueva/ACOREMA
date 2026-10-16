@@ -1,52 +1,122 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import fs from 'node:fs';
+const pages=JSON.parse(fs.readFileSync('content/official-pages.json','utf8'));
 
-test('desktop: navigation, learning content and accessible dialogs', async ({ page }) => {
-  const errors=[]; page.on('pageerror', e=>errors.push(e.message));
-  await page.goto('/');
-  await expect(page).toHaveTitle(/ACOREMA/);
-  await expect(page.locator('h1')).toContainText('Un mar de vida.');
-  await page.getByRole('link',{name:/Descubre nuestro trabajo/}).click();
-  await expect(page).toHaveURL(/#trabajo$/);
-  await page.getByRole('button',{name:'Conoce la vida marina'}).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('heading',{name:'Un océano lleno de vecinos'})).toBeVisible();
-  const dialogResults=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
-  expect(dialogResults.violations).toEqual([]);
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).not.toBeVisible();
-  await expect(page.getByRole('button',{name:'Conoce la vida marina'})).toBeFocused();
-  const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
-  expect(results.violations).toEqual([]);
-  expect(errors).toEqual([]);
-  await page.goto('/'); await page.screenshot({path:'/tmp/acorema-desktop.png',fullPage:true});
+test('official identity, real navigation and keyboard dialog',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/');
+ await expect(page.locator('header .brand img')).toHaveAttribute('src','./images/official/acorema-symbol.png');
+ await page.getByRole('link',{name:'Más sobre nosotros'}).click();
+ await expect(page).toHaveURL(/nosotros.html$/);
+ await expect(page.locator('.prose')).toContainText('1995');
+ await page.getByRole('link',{name:'Misión y visión',exact:true}).first().click();
+ await expect(page.locator('main')).toContainText('Contribuir a la sostenibilidad marino-costera');
+ await page.goto('/');
+ await page.getByRole('button',{name:'Pequeñas acciones, gran cambio'}).click();
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(page.getByRole('button',{name:'Pequeñas acciones, gran cambio'})).toBeFocused();
+ expect(errors).toEqual([]);
 });
 
-test('mobile: menu, content, contact and no horizontal overflow',async ({page})=>{
-  await page.setViewportSize({width:390,height:844}); await page.goto('/');
-  const menu=page.getByRole('button',{name:'Menú'});
-  await expect(menu).toHaveAttribute('aria-expanded','false');
-  await menu.click(); await expect(menu).toHaveAttribute('aria-expanded','true');
-  await page.getByRole('navigation').getByRole('link',{name:'Participa',exact:true}).click();
-  await expect(menu).toHaveAttribute('aria-expanded','false');
-  await page.getByRole('button',{name:/Quiero participar/}).click();
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByRole('dialog').getByRole('link')).toHaveAttribute('href','https://www.acorema.org.pe/');
-  await page.getByRole('button',{name:'Cerrar ventana'}).click();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
-  const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
-  expect(results.violations).toEqual([]);
-  await page.goto('/'); await page.screenshot({path:'/tmp/acorema-mobile.png',fullPage:true});
-});
-
-test('every content action opens its own content and can close', async ({page})=>{
-  await page.goto('/');
-  const buttons=page.locator('[data-dialog]');
-  for(let i=0;i<await buttons.count();i++){
-    await buttons.nth(i).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.locator('#dialog-title')).not.toBeEmpty();
-    await page.getByRole('button',{name:'Entendido'}).click();
-    await expect(page.getByRole('dialog')).not.toBeVisible();
+test('all pages load, all internal links and images exist, mobile layouts fit',async({page,request})=>{
+ const localLinks=new Set();const assets=new Set();
+ for(const slug of ['index',...pages.map(p=>p.slug),'juegos','fuentes']){
+  const response=await page.goto(`/${slug}.html`);
+  expect(response.status(),slug).toBe(200);
+  await expect(page.locator('h1')).toHaveCount(1);
+  expect((await page.locator('main').innerText()).length,slug).toBeGreaterThan(100);
+  for(const href of await page.locator('a[href]').evaluateAll(links=>links.map(a=>a.getAttribute('href')))){
+   if(href.startsWith('./')&&!href.includes('/images/'))localLinks.add(href.split('#')[0]);
   }
+  for(const src of await page.locator('img').evaluateAll(imgs=>imgs.map(img=>img.getAttribute('src'))))assets.add(src);
+  await page.setViewportSize({width:320,height:800});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),slug).toBe(true);
+ }
+ for(const href of [...localLinks,...assets]){
+  const response=await request.get(new URL(href,'http://127.0.0.1:5173/').href);
+  expect(response.status(),href).toBe(200);
+ }
 });
+
+test('resource search, accents, format filter, zero results and restored catalog',async({page})=>{
+ await page.goto('/materiales.html');
+ const all=await page.locator('.resource-card:visible').count();expect(all).toBeGreaterThan(25);
+ await page.getByLabel('Buscar en esta colección').fill('pinguino');
+ const filtered=await page.locator('.resource-card:visible').count();expect(filtered).toBeGreaterThan(0);expect(filtered).toBeLessThan(all);
+ await page.getByLabel('Buscar en esta colección').fill('noexistezzzz');
+ await expect(page.locator('.no-results')).toBeVisible();
+ await expect(page.locator('#result-number')).toHaveText('0');
+ await page.getByLabel('Buscar en esta colección').fill('');
+ await expect(page.locator('.resource-card:visible')).toHaveCount(all);
+ await page.goto('/clima.html');
+ await page.getByLabel('Formato', {exact:true}).selectOption('Vídeo');
+ expect(await page.locator('.resource-card:visible').count()).toBe(15);
+ await expect(page.locator('.resource-card:visible').first()).toContainText('Conoce el Humedal de Pisco Playa');
+ await page.goto('/boletines.html');await expect(page.locator('.resource-card')).toHaveCount(86);
+});
+
+test('gallery navigation, full image loading, Escape and focus return',async({page})=>{
+ await page.goto('/galeria.html');
+ const first=page.locator('.gallery-photo').first();await first.click();
+ await expect(page.locator('#image-dialog')).toBeVisible();
+ await expect(page.locator('#image-counter')).toHaveText('1 / 9');
+ await expect.poll(()=>page.locator('#lightbox-image').evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);
+ await page.keyboard.press('ArrowRight');await expect(page.locator('#image-counter')).toHaveText('2 / 9');
+ await page.keyboard.press('ArrowLeft');await expect(page.locator('#image-counter')).toHaveText('1 / 9');
+ await page.keyboard.press('Escape');await expect(first).toBeFocused();
+});
+
+test('mobile menu, direct institutional contact and playable audio',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/');
+ const menu=page.getByRole('button',{name:'Menú'});await menu.click();
+ await expect(menu).toHaveAttribute('aria-expanded','true');
+ await page.getByRole('navigation',{name:'Navegación principal'}).getByRole('link',{name:'Conversemos'}).click();
+ await expect(page).toHaveURL(/contacto.html$/);
+ await expect(page.locator('.contact-grid a[href="mailto:acoremabiodiverso@yahoo.com"]').first()).toBeVisible();
+ await expect(page.locator('.contact-grid a[href="tel:+5156534094"]')).toBeVisible();
+ await page.goto('/spots.html');await expect(page.locator('audio')).toHaveCount(4);
+ await page.locator('audio').first().evaluate(audio=>audio.load());
+ await expect.poll(()=>page.locator('audio').first().evaluate(audio=>Number.isFinite(audio.duration)&&audio.duration>0)).toBe(true);
+});
+
+test('memory game can be completed, reset and quiz grades actual answers',async({page})=>{
+ await page.goto('/juegos.html');
+ const known=new Map();
+ for(let i=0;i<12;i+=2){
+  for(const j of [i,i+1]){
+   const card=page.locator('#memory-board button').nth(j);
+   await card.click();
+   const value=await card.innerText();
+   if(!known.has(value))known.set(value,[]);
+   known.get(value).push(j);
+  }
+  if(await page.locator('#memory-continue').isVisible())await page.locator('#memory-continue').click();
+ }
+ for(const indices of known.values()){
+  const first=page.locator('#memory-board button').nth(indices[0]);
+  if(await first.getAttribute('aria-disabled')==='true')continue;
+  await first.click();
+  await page.locator('#memory-board button').nth(indices[1]).click();
+ }
+ await expect(page.locator('#memory-status')).toContainText('6 de 6 parejas');
+ await page.getByRole('button',{name:'Reiniciar juego'}).click();
+ await expect(page.locator('#memory-status')).toHaveText('0 de 6 parejas · 0 intentos');
+ await page.getByLabel('1995',{exact:true}).check();
+ await page.getByLabel('En la provincia de Pisco').check();
+ await page.getByLabel('Investigación y conservación',{exact:true}).check();
+ await page.getByRole('button',{name:'Comprobar respuestas'}).click();
+ await expect(page.locator('#quiz-result')).toContainText('3 de 3 respuestas correctas');
+});
+
+for(const viewport of [{width:1280,height:900},{width:390,height:844}]){
+ test(`WCAG automatic checks across representative pages at ${viewport.width}px`,async({page})=>{
+  test.setTimeout(120000);await page.setViewportSize(viewport);
+  for(const slug of ['index','nosotros','materiales','campanas','galeria','juegos','contacto','ballenas']){
+   await page.goto(`/${slug}.html`);
+   const results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();
+   expect(results.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({target:n.target,summary:n.failureSummary}))})),slug).toEqual([]);
+  }
+ });
+}

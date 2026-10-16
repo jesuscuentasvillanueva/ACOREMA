@@ -25,6 +25,10 @@ jobs:
         run: npm ci
       - name: Compilar la web
         run: npm run build
+      - name: Instalar navegador para las pruebas
+        run: npx playwright install --with-deps chromium
+      - name: Verificar navegación y accesibilidad
+        run: npm test
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
