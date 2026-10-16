@@ -1,174 +1,48 @@
 import '../main.js';
-import {sprites, labels} from './sprites.js';
-import {levels, COLS, ROWS} from './levels.js';
-const root = document.querySelector('#ocean-game');
-const board = root.querySelector('#ocean-board');
-const overlay = root.querySelector('#mission-overlay');
-const player = root.querySelector('#submarine');
-const status = root.querySelector('#ocean-status');
-const pauseButton = root.querySelector('#pause-game');
-const soundButton = root.querySelector('#sound-game');
-const arrows = [...root.querySelectorAll('[data-move]')];
-const STORE = 'acorema-ocean-badges-v1';
-const directions = {up:[0,-1], down:[0,1], left:[-1,0], right:[1,0]};
-let phase = 'intro', levelIndex = 0, position = {x:0,y:4}, trash = [], collected = 0, bumps = 0, stars = 0, points = 0;
-let sound = false, audio, feedbackTimer, lastEncounter = '';
-let records = [0,0,0];
-try {
-  const saved = JSON.parse(localStorage.getItem(STORE));
-  if (Array.isArray(saved) && saved.length === 3 && saved.every(n=>Number.isInteger(n)&&n>=0&&n<=3)) records = saved;
-} catch { /* Progress is optional; the game also works without browser storage. */ }
-player.innerHTML = sprites.sub;
-root.querySelectorAll('[data-sprite]').forEach(el => el.innerHTML = sprites[el.dataset.sprite]);
-function save() { try {localStorage.setItem(STORE, JSON.stringify(records));} catch {} }
-function collection() { root.querySelector('#badge-count').textContent = `${records.filter(Boolean).length} / 3`; }
-function chime(success=true) {
-  if (!sound || !audio) return;
-  try {
-    const t=audio.currentTime;
-    [success?523:330,success?784:392].forEach((f,i)=>{
-      const o=audio.createOscillator(),g=audio.createGain();o.type='sine';o.frequency.value=f;
-      g.gain.setValueAtTime(0,t+i*.10);g.gain.linearRampToValueAtTime(.045,t+i*.10+.015);g.gain.exponentialRampToValueAtTime(.001,t+i*.10+.16);
-      o.connect(g);g.connect(audio.destination);o.start(t+i*.10);o.stop(t+i*.10+.18);
-    });
-  } catch { /* Sound must never interrupt a mission. */ }
+import {createWorld,step,missions,WIDTH,HEIGHT} from './engine.js';
+const $=s=>document.querySelector(s),canvas=$('#ocean-canvas'),ctx=canvas.getContext('2d'),overlay=$('#mission-overlay');
+let world=createWorld(),phase='intro',index=0,total=0,last=0,cam={x:0,y:0},view={w:900,h:570},badges=[],keys=new Set();
+try{const saved=JSON.parse(localStorage.getItem('acorema-expedition-v2')||'[]');if(Array.isArray(saved))badges=saved.filter(x=>Number.isInteger(x)&&x>=0&&x<3);}catch{}
+const status=t=>$('#ocean-status').textContent=t;
+function count(){ $('#badge-count').textContent=`${new Set(badges).size} / 3`; }count();
+function resize(){const r=canvas.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);view={w:r.width,h:r.height};canvas.width=r.width*d;canvas.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);}new ResizeObserver(resize).observe(canvas);
+function panel(html){overlay.hidden=false;overlay.innerHTML=`<div class="mission-panel">${html}</div>`;overlay.querySelector('button')?.focus({preventScroll:true});}
+function start(){world=createWorld(index);phase='playing';keys.clear();overlay.hidden=true;$('#pause-game').disabled=false;$('#pause-game').textContent='Pausar';$('#mission-name').textContent=missions[index].name;$('#mission-place').textContent=missions[index].place;canvas.focus({preventScroll:true});status('Busca los residuos. Usa el sonar para atraer los que estén cerca.');}
+function pause(){if(phase!=='playing')return;phase='paused';keys.clear();$('#pause-game').textContent='Continuar';panel('<p class="game-kicker">TÓMATE UN RESPIRO</p><h2>Expedición en pausa</h2><p>El océano te espera. Tu progreso sigue aquí.</p><button class="game-primary" id="resume-game">Continuar →</button><button id="restart-game">Reiniciar expedición</button>');}
+function resume(){phase='playing';overlay.hidden=true;$('#pause-game').textContent='Pausar';canvas.focus({preventScroll:true});}
+function finish(){phase='reward';keys.clear();total+=world.score;badges=[...new Set([...badges,index])];try{localStorage.setItem('acorema-expedition-v2',JSON.stringify(badges));}catch{}count();$('#pause-game').disabled=true;panel(`<p class="game-kicker">EXPEDICIÓN ${index+1} COMPLETADA</p><h2>¡Un mar más limpio!</h2><p>8 residuos recogidos · ${world.score} puntos<br>${world.hits===0?'Navegación excelente: respetaste a los animales y evitaste las rocas.':'Sigue practicando: navega despacio cerca de animales y rocas.'}</p><p>${missions[index].fact}</p><button class="game-primary" id="next-game">${index<2?'Siguiente expedición →':'Ver mi aventura →'}</button>`);}
+$('#start-game').addEventListener('click',start);
+overlay.addEventListener('click',e=>{if(e.target.closest('#resume-game'))resume();if(e.target.closest('#restart-game'))start();if(e.target.closest('#next-game')){if(index<2){index++;start();}else{panel(`<p class="game-kicker">GUARDIÁN DEL MAR</p><h2>¡Océano protegido!</h2><p>3 expediciones · 24 residuos · ${total} puntos</p><p>Tu próxima misión está fuera de la pantalla: reduce el plástico y comparte lo que aprendiste.</p><button id="replay-game" class="game-primary">Volver a explorar →</button>`);}}if(e.target.closest('#replay-game')){index=0;total=0;start();}});
+$('#pause-game').addEventListener('click',()=>phase==='paused'?resume():pause());
+const keymap={ArrowUp:'up',w:'up',ArrowDown:'down',s:'down',ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right',' ':'boost',e:'sonar'};
+canvas.addEventListener('keydown',e=>{if(e.ctrlKey||e.altKey||e.metaKey)return;const key=keymap[e.key]||keymap[e.key.toLowerCase()];if(key){e.preventDefault();if(phase==='playing')keys.add(key);}if(e.key==='Escape')pause();});
+window.addEventListener('keyup',e=>keys.delete(keymap[e.key]||keymap[e.key.toLowerCase()]));
+window.addEventListener('blur',pause);document.addEventListener('visibilitychange',()=>{if(document.hidden)pause();});
+for(const button of document.querySelectorAll('[data-move],#boost-game,#sonar-game')){const action=button.dataset.move||(button.id==='boost-game'?'boost':'sonar');button.addEventListener('pointerdown',e=>{if(phase!=='playing')return;e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(action);});for(const name of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(name,()=>keys.delete(action));button.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(phase==='playing')keys.add(action);}});button.addEventListener('keyup',()=>keys.delete(action));button.addEventListener('blur',()=>keys.delete(action));}
+// Original procedural artwork: layered light, terrain and wildlife, with a camera following the pilot.
+function ellipse(x,y,rx,ry,color){ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fill();}
+function fish(x,y,size,dir,color){ctx.save();ctx.translate(x,y);ctx.scale(dir,1);ellipse(0,0,size,size*.32,color);ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(-size*.7,0);ctx.lineTo(-size*1.5,-size*.45);ctx.lineTo(-size*1.5,size*.45);ctx.fill();ellipse(size*.65,-size*.08,1.5,1.5,'#092b3a');ctx.restore();}
+function draw(){const {w,h}=view,scale=Math.max(.58,Math.min(1,h/660));const visibleW=w/scale,visibleH=h/scale;cam.x=Math.max(0,Math.min(WIDTH-visibleW,world.x-visibleW*.43));cam.y=Math.max(0,Math.min(HEIGHT-visibleH,world.y-visibleH*.45));
+ const bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,['#126d87','#216b65','#195772'][world.level]);bg.addColorStop(.45,['#064760','#124b48','#123b5b'][world.level]);bg.addColorStop(1,'#021a2e');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);
+ ctx.save();ctx.scale(scale,scale);ctx.translate(-cam.x,-cam.y);
+ const ambient=matchMedia('(prefers-reduced-motion: reduce)').matches?0:world.time;
+ for(let i=0;i<12;i++){ctx.fillStyle=`rgba(128,225,229,${.025+i%3*.008})`;ctx.beginPath();ctx.moveTo(i*310-180,0);ctx.lineTo(i*310+50,0);ctx.lineTo(i*310+700,HEIGHT);ctx.lineTo(i*310+380,HEIGHT);ctx.fill();}
+ for(let layer=0;layer<3;layer++){ctx.fillStyle=['#0b3b50','#0c3846','#153b45'][layer];ctx.beginPath();ctx.moveTo(0,HEIGHT);for(let x=0;x<=WIDTH+20;x+=20)ctx.lineTo(x,HEIGHT-70-layer*18+Math.sin(x/140+layer*2)*30);ctx.lineTo(WIDTH,HEIGHT);ctx.fill();}
+ for(let i=0;i<95;i++){const x=i*29,y=920+Math.sin(i*4)*35;ctx.strokeStyle=i%2?'#24665d':'#1b5555';ctx.lineWidth=3+i%4;ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+Math.sin(ambient+i)*14,y-50,x+Math.sin(ambient*.7+i)*22,y-70-i%6*(world.level===1?45:18));ctx.stroke();}
+ for(let i=0;i<65;i++){const x=(i*173+ambient*(4+i%4))%WIDTH,y=(i*97)%850;ellipse(x,y,1+i%2,1+i%2,'#a8e5df30');}
+ for(let i=0;i<28;i++)fish((i*131+ambient*(16+i%5))%WIDTH,160+i%6*90+Math.sin(ambient+i)*8,5+i%4,1,'#8bc2bd65');
+ for(const r of world.rocks){const g=ctx.createRadialGradient(r.x-30,r.y-40,5,r.x,r.y,r.r);g.addColorStop(0,'#537879');g.addColorStop(1,'#193f4a');ellipse(r.x,r.y,r.r,r.r,g);ctx.strokeStyle='#88a6a14d';ctx.lineWidth=2;ctx.beginPath();ctx.arc(r.x-5,r.y-5,r.r*.75,3.5,5);ctx.stroke();}
+ for(const a of world.animals){ctx.save();ctx.translate(a.x,a.y);ctx.scale(a.dir,1);if(world.level===2){ellipse(0,0,34,24,'#668d68');for(const [x,y] of [[-22,-24],[20,-23],[-22,24],[20,23]])ellipse(x,y,18,7,'#9ab58c');ellipse(41,0,13,9,'#9ab58c');ellipse(0,0,23,17,'#416b54');}else if(world.level===0){const skin=ctx.createLinearGradient(0,-20,0,22);skin.addColorStop(0,'#527d90');skin.addColorStop(.55,'#9bbac4');skin.addColorStop(1,'#d2dddd');ctx.fillStyle=skin;ctx.beginPath();ctx.moveTo(65,4);ctx.bezierCurveTo(48,-2,49,-18,21,-20);ctx.bezierCurveTo(8,-21,7,-45,-5,-40);ctx.lineTo(-12,-20);ctx.bezierCurveTo(-31,-14,-43,-4,-61,-6);ctx.lineTo(-80,-20);ctx.lineTo(-72,0);ctx.lineTo(-81,14);ctx.lineTo(-59,5);ctx.bezierCurveTo(-34,7,-20,19,8,19);ctx.bezierCurveTo(27,18,42,9,65,8);ctx.closePath();ctx.fill();ctx.fillStyle='#537d8c';ctx.beginPath();ctx.moveTo(4,12);ctx.quadraticCurveTo(-6,38,-22,33);ctx.lineTo(-10,8);ctx.fill();ellipse(38,-6,2,2,'#102e3a');}else{ellipse(0,0,47,17,'#6f6251');ellipse(40,-2,16,13,'#95826b');ellipse(43,2,10,7,'#c4af8a');ellipse(45,-7,2,2,'#162e36');ellipse(52,1,3,2,'#263537');ctx.strokeStyle='#6f6251';ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(-39,0);ctx.quadraticCurveTo(-65,5,-71,19);ctx.stroke();ellipse(12,17,18,5,'#67594c');ellipse(-23,16,13,5,'#67594c');}ctx.restore();}
+ for(const t of world.trash)if(!t.taken){const float=Math.sin(ambient*2+t.x)*4;ctx.save();ctx.translate(t.x,t.y+float);ctx.rotate(Math.sin(t.x)*.4);if(world.sonar){ellipse(0,0,32,32,'#b4fa8a25');}ctx.shadowColor='#9ff6df';ctx.shadowBlur=12;ctx.fillStyle=['#b3d8d7','#d0d3ba','#90b6c2'][t.type];if(t.type===0){ctx.fillRect(-8,-15,16,30);ctx.fillStyle='#539caa';ctx.fillRect(-4,-22,8,7);ctx.fillRect(-8,-4,16,10);}else if(t.type===1){ctx.fillRect(-13,-12,26,25);ctx.strokeStyle='#d0d3ba';ctx.lineWidth=3;ctx.strokeRect(-9,-20,18,14);}else{ctx.fillRect(-10,-13,20,26);ctx.fillStyle='#587c89';ctx.fillRect(-10,-2,20,7);}ctx.restore();}
+ const dockX=WIDTH-100;ctx.strokeStyle='#b7f26780';ctx.setLineDash([8,8]);ctx.lineWidth=2;ctx.strokeRect(dockX-65,110,130,250);ctx.setLineDash([]);ellipse(dockX,150,26,12,'#f5ac51');ctx.fillStyle='#eaf7ef';ctx.font='bold 14px sans-serif';ctx.textAlign='center';ctx.fillText(world.collected===8?'SALIDA →':'BOYA DE SALIDA',dockX,100); // navigational marker
+ ctx.save();ctx.translate(world.x,world.y);const facing=world.vx<-10?-1:1;ctx.scale(facing,1);ctx.rotate(Math.max(-.22,Math.min(.22,world.vy/1000))*facing);
+ const beam=ctx.createLinearGradient(25,0,230,0);beam.addColorStop(0,'#e2f5c235');beam.addColorStop(1,'#e2f5c200');ctx.fillStyle=beam;ctx.beginPath();ctx.moveTo(25,0);ctx.lineTo(230,-70);ctx.lineTo(230,70);ctx.fill();
+ if(Math.hypot(world.vx,world.vy)>40)for(let i=0;i<6;i++)ellipse(-60-i*15,-3+Math.sin(ambient*8+i)*8,2+i*.6,2+i*.6,'#a0dfed60');
+ ellipse(0,20,52,12,'#00172444');ctx.fillStyle='#1e3943';ctx.fillRect(-52,-12,12,26);const hull=ctx.createLinearGradient(0,-24,0,25);hull.addColorStop(0,'#ffdd77');hull.addColorStop(.45,'#e5ab37');hull.addColorStop(1,'#9f641f');ellipse(0,0,49,25,hull);ctx.fillStyle='#b8c6bd';ctx.fillRect(-12,-32,25,10);ctx.fillStyle='#2a4b59';ctx.fillRect(-4,-44,7,15);ellipse(21,-2,15,17,'#d6e1d5');ellipse(22,-2,11,13,'#1b657f');ellipse(25,-7,4,5,'#a1dfdf');ctx.fillStyle='#574d34';ctx.fillRect(-24,-6,14,3);ctx.fillRect(-24,1,14,3);ctx.restore();
+ if(world.sonar){ctx.strokeStyle='#b7f26780';ctx.lineWidth=2;ctx.beginPath();ctx.arc(world.x,world.y,80+(3-world.sonar)*100,0,Math.PI*2);ctx.stroke();}
+ ctx.restore();
+ const target=world.trash.find(t=>!t.taken)||{x:WIDTH-100,y:270};const dx=target.x-world.x,dy=target.y-world.y;ctx.save();ctx.translate(w-55,h-60);ctx.fillStyle='#042537dd';ctx.beginPath();ctx.arc(0,0,35,0,Math.PI*2);ctx.fill();ctx.rotate(Math.atan2(dy,dx));ctx.fillStyle='#b7f267';ctx.beginPath();ctx.moveTo(21,0);ctx.lineTo(-10,-9);ctx.lineTo(-5,0);ctx.lineTo(-10,9);ctx.fill();ctx.restore();
+ // Mini-map shows the complete dive, remaining litter, rocks and the exit.
+ const mw=Math.min(170,w*.3),mx=w-mw-18,my=h-10;ctx.fillStyle='#031d2ccc';ctx.fillRect(mx,my-32,mw,36);for(const t of world.trash)if(!t.taken)ellipse(mx+t.x/WIDTH*mw,my-28+t.y/HEIGHT*28,2,2,'#b7f267');ellipse(mx+world.x/WIDTH*mw,my-28+world.y/HEIGHT*28,3,3,'#fff');
 }
-function message(text) {
-  clearTimeout(feedbackTimer); status.textContent=text;
-  status.classList.add('new-message');
-  feedbackTimer=setTimeout(()=>status.classList.remove('new-message'),350);
-}
-function setPhase(next) {
-  phase=next;root.dataset.phase=next;
-  const active=next==='playing';
-  board.inert=!active;
-  arrows.forEach(b=>b.disabled=!active);
-  pauseButton.disabled=!['playing','paused'].includes(next);
-  pauseButton.textContent=next==='paused'?'Continuar':'Pausar';
-  pauseButton.setAttribute('aria-pressed', String(next==='paused'));
-}
-function showPanel(html, focusId) {
-  overlay.innerHTML=html;overlay.hidden=false;
-  requestAnimationFrame(()=>root.querySelector(focusId)?.focus({preventScroll:true}));
-}
-function hidePanel() { overlay.hidden=true;overlay.replaceChildren(); }
-function shuffle(items) {
-  for(let i=items.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[items[i],items[j]]=[items[j],items[i]];}
-  return items;
-}
-function animalAt(x,y) { return levels[levelIndex].animals.find(a=>a.x===x&&a.y===y); }
-function tile(x,y) { return board.querySelector(`[data-x="${x}"][data-y="${y}"]`); }
-function renderBoard(focus=false) {
-  board.replaceChildren();
-  for(let y=0;y<ROWS;y++) {
-    const row=document.createElement('div');row.className='ocean-row';row.setAttribute('role','row');
-    for(let x=0;x<COLS;x++) {
-      const b=document.createElement('button');b.type='button';b.className='ocean-tile';b.setAttribute('role','gridcell');b.dataset.x=x;b.dataset.y=y;
-      const a=animalAt(x,y), t=trash.find(t=>t.x===x&&t.y===y), here=position.x===x&&position.y===y;
-      b.tabIndex=here?0:-1;
-      const name=here?'Tu minisubmarino':a?`${labels[a.type]}. Dale espacio`:t?`Residuo: ${labels[t.type]}`:'Agua libre';
-      b.setAttribute('aria-label',`Fila ${y+1}, columna ${x+1}: ${name}`);
-      b.setAttribute('aria-selected',String(here));
-      if(a){b.innerHTML=sprites[a.type];b.classList.add('animal-tile');}
-      if(t){b.innerHTML=sprites[t.type];b.classList.add('trash-tile');}
-      if(Math.abs(position.x-x)+Math.abs(position.y-y)===1)b.classList.add('reachable');
-      if(here)b.classList.add('player-tile');
-      b.addEventListener('click',()=>{
-        if(phase!=='playing')return;
-        if(here){message('Elige una casilla vecina o usa las flechas para nadar.');return;}
-        if(Math.abs(position.x-x)+Math.abs(position.y-y)!==1){message('¡Un paso a la vez! Toca una casilla vecina o usa las flechas.');tile(position.x,position.y).focus({preventScroll:true});return;}
-        move(x-position.x,y-position.y,true);
-      });
-      row.append(b);
-    }
-    board.append(row);
-  }
-  player.style.left=`${(position.x+.5)*100/COLS}%`;player.style.top=`${(position.y+.5)*100/ROWS}%`;
-  if(focus&&phase==='playing')tile(position.x,position.y)?.focus({preventScroll:true});
-}
-function updateHud() {
-  const level=levels[levelIndex];
-  root.querySelector('#mission-number').textContent=`MISIÓN ${levelIndex+1} DE 3`;
-  root.querySelector('#mission-name').textContent=level.name;
-  root.querySelector('#mission-place').textContent=level.place;
-  root.querySelector('#trash-count').textContent=`${collected} / ${level.goal}`;
-  root.querySelector('#game-points').textContent=points;
-  const meter=root.querySelector('#mission-progress');meter.max=level.goal;meter.value=collected;
-  meter.setAttribute('aria-label',`${collected} de ${level.goal} residuos recogidos`);
-  root.querySelectorAll('.mission-step').forEach((step,i)=>{step.classList.toggle('current',i===levelIndex);step.classList.toggle('done',i<levelIndex);if(i===levelIndex)step.setAttribute('aria-current','step');else step.removeAttribute('aria-current');});
-}
-function beginLevel() {
-  position={x:0,y:4};collected=0;bumps=0;lastEncounter='';
-  const available=[];
-  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(!animalAt(x,y)&&!(x===0&&y===4))available.push({x,y});
-  const types=['bottle','bag','can','cup'];
-  trash=shuffle(available).slice(0,levels[levelIndex].goal).map((p,i)=>({...p,type:types[i%types.length]}));
-  root.dataset.biome=levelIndex;
-  hidePanel();setPhase('playing');renderBoard();updateHud();message(levels[levelIndex].tip);
-  tile(0,4).focus({preventScroll:true});
-  root.querySelector('.game-mission-head').scrollIntoView({block:'start',behavior:'auto'});
-}
-function move(dx,dy,focus=false) {
-  if(phase!=='playing')return;
-  const x=position.x+dx,y=position.y+dy;
-  if(x<0||x>=COLS||y<0||y>=ROWS){message('Ese es el borde. ¡Prueba otra dirección!');return;}
-  const animal=animalAt(x,y);
-  if(animal){const encounter=`${x},${y}`;if(lastEncounter!==encounter)bumps++;lastEncounter=encounter;const name={dolphin:'al bufeo',penguin:'al pingüino de Humboldt',otter:'a la nutria marina',turtle:'a la tortuga marina'}[animal.type];message(`¡Dale espacio ${name}! Busca un camino por el agua libre.`);chime(false);if(focus)tile(position.x,position.y).focus({preventScroll:true});return;}
-  lastEncounter='';position={x,y};player.classList.toggle('facing-left',dx<0?true:dx>0?false:player.classList.contains('facing-left'));
-  const index=trash.findIndex(t=>t.x===x&&t.y===y);
-  if(index>=0){const [item]=trash.splice(index,1);collected++;points+=10;chime();message(`¡Bien! Un residuo menos. ${collected} de ${levels[levelIndex].goal} recogidos.`);}
-  else message(`Fila ${y+1}, columna ${x+1}. ${surroundings()}`);
-  renderBoard(focus);updateHud();
-  if(collected===levels[levelIndex].goal)completeLevel();
-}
-function surroundings() {
-  const near=Object.entries(directions).map(([dir,[dx,dy]])=>{
-    const x=position.x+dx,y=position.y+dy;
-    const t=trash.find(t=>t.x===x&&t.y===y),a=animalAt(x,y);
-    const names={up:'Arriba',down:'Abajo',left:'Izquierda',right:'Derecha'};
-    return t?`${names[dir]}: ${labels[t.type]}.`:a?`${names[dir]}: ${labels[a.type]}, dale espacio.`:'';
-  }).filter(Boolean);
-  return near.join(' ')||'Sigue explorando con las flechas.';
-}
-board.addEventListener('keydown',event=>{
-  if(event.ctrlKey||event.metaKey||event.altKey)return;
-  const key={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'}[event.key];
-  if(key){event.preventDefault();move(...directions[key],true);}
-});
-arrows.forEach(b=>b.addEventListener('click',()=>move(...directions[b.dataset.move])));
-function completeLevel() {
-  setPhase('question');stars=bumps===0?3:bumps===1?2:1;
-  const level=levels[levelIndex];
-  showPanel(`<div class="mission-panel"><div class="reward-icon">${sprites.shell}</div><p class="game-kicker">¡MISIÓN COMPLETADA!</p><h2 id="panel-title">¡El mar está más limpio!</h2><p>Recogiste ${level.goal} residuos. Ahora, un pequeño reto:</p><fieldset class="ocean-question"><legend>${level.question}</legend>${level.answers.map((answer,i)=>`<button type="button" data-answer="${i}">${answer}<span aria-hidden="true">→</span></button>`).join('')}</fieldset><p id="question-feedback" role="status" aria-live="polite"></p></div>`, '[data-answer="0"]');
-  overlay.querySelectorAll('[data-answer]').forEach(button=>button.addEventListener('click',()=>{
-    if(Number(button.dataset.answer)!==level.correct){button.classList.add('try-again');root.querySelector('#question-feedback').textContent='Casi. Piensa en lo que ayuda al mar y a sus animales. Puedes intentarlo otra vez.';return;}
-    chime();records[levelIndex]=Math.max(records[levelIndex],stars);save();collection();
-    showPanel(`<div class="mission-panel"><div class="reward-stars" role="img" aria-label="${stars} de 3 estrellas">${Array.from({length:3},(_,i)=>`<span class="${i<stars?'earned':''}" aria-hidden="true">${sprites.star}</span>`).join('')}</div><p class="game-kicker">INSIGNIA DESBLOQUEADA</p><h2 id="panel-title">${level.badge}</h2><p>${level.explanation}</p><p class="star-explanation">${stars===3?'¡Dejaste espacio a los animales y ganaste las tres estrellas!':'Para ganar más estrellas, busca un camino que deje espacio a los animales.'}</p><div class="ocean-fact"><strong>¿Sabías que…?</strong><p>${level.fact}</p></div><button type="button" id="next-mission" class="game-primary">${levelIndex===2?'Ver mi aventura':'Siguiente misión'} <span aria-hidden="true">→</span></button></div>`, '#next-mission');
-    root.querySelector('#next-mission').addEventListener('click',()=>{if(levelIndex===2)finish();else{levelIndex++;beginLevel();}});
-  }));
-}
-function pause() {
-  if(phase!=='playing')return;
-  setPhase('paused');
-  showPanel('<div class="mission-panel pause-panel"><p class="game-kicker">TU AVENTURA TE ESPERA</p><h2 id="panel-title">Un respiro.</h2><p>El mar puede esperar. Vuelve cuando quieras.</p><button type="button" id="resume-game" class="game-primary">Seguir explorando ▶</button><button type="button" id="restart-game" class="game-secondary">Empezar de nuevo</button></div>', '#resume-game');
-  root.querySelector('#resume-game').addEventListener('click',resume);
-  root.querySelector('#restart-game').addEventListener('click',start);
-}
-function resume(){if(phase!=='paused')return;hidePanel();setPhase('playing');tile(position.x,position.y).focus({preventScroll:true});message('¡Seguimos! '+surroundings());}
-pauseButton.addEventListener('click',()=>phase==='paused'?resume():pause());
-root.addEventListener('keydown',event=>{if(event.key==='Escape'&&phase==='playing'){event.preventDefault();pause();}});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&phase==='playing')pause();});
-soundButton.addEventListener('click',async()=>{
-  if(sound){sound=false;soundButton.setAttribute('aria-pressed','false');soundButton.textContent='Sonido: no';return;}
-  const Audio=window.AudioContext||window.webkitAudioContext;
-  if(!Audio){message('Este navegador no reproduce sonidos. ¡Puedes jugar igual!');return;}
-  try{audio ||= new Audio();await audio.resume();sound=true;soundButton.setAttribute('aria-pressed','true');soundButton.textContent='Sonido: sí';chime();}catch{message('No se pudo activar el sonido. Puedes seguir jugando sin él.');}
-});
-function finish() {
-  setPhase('finished');chime();
-  showPanel(`<div class="mission-panel final-panel"><div class="reward-icon">${sprites.star}</div><p class="game-kicker">TRES MISIONES. UN MISMO MAR.</p><h2 id="panel-title">¡Eres parte del cambio!</h2><p>Recogiste 15 residuos en esta aventura y ganaste <strong>${points} puntos</strong>. Cada pequeño gesto cuenta.</p><div class="badge-collection">${levels.map((l,i)=>`<div>${sprites.shell}<span>${l.badge}</span><small>${records[i]} de 3 estrellas</small></div>`).join('')}</div><p class="real-world-tip">En la vida real, cuida la playa con una persona adulta y protección. Observa a los animales sin tocarlos ni darles comida.</p><button type="button" id="play-again" class="game-primary">Jugar otra aventura ↻</button><a class="game-secondary" href="./galeria.html">Conocer a los animales reales →</a></div>`, '#play-again');
-  root.querySelector('#play-again').addEventListener('click',start);
-}
-function start(){levelIndex=0;points=0;beginLevel();}
-root.querySelector('#start-game').addEventListener('click',start);
-collection();updateHud();setPhase('intro');
+let hud='';function frame(now){const dt=last?Math.min((now-last)/1000,.04):0;last=now;if(phase==='playing'){step(world,{x:Number(keys.has('right'))-Number(keys.has('left')),y:Number(keys.has('down'))-Number(keys.has('up')),boost:keys.has('boost'),sonar:keys.has('sonar')},dt);if(world.event==='pickup')status(`¡Residuo recuperado! ${world.collected} de 8.${world.combo>1?' Combinación ×'+world.combo+'.':''}`);if(world.event==='animal')status('Deja más espacio al animal. Rodea su camino despacio.');if(world.event==='rock')status('¡Una roca! Prueba a rodearla por arriba o por abajo.');if(world.collected===8&&world.event==='pickup')status('¡Los tienes todos! Sigue el indicador hasta la boya de salida.');if(world.done)finish();}const next=`${world.collected}-${world.score}-${Math.round(world.energy)}-${Math.ceil(world.cooldown)}`;if(next!==hud){hud=next;$('#trash-count').textContent=`${world.collected} / 8 residuos`;$('#game-points').textContent=`${total+(phase==='reward'?0:world.score)} puntos`;$('#energy').value=world.energy;$('#sonar-game').innerHTML=`◎ Sonar <small>${world.cooldown?`listo en ${Math.ceil(world.cooldown)} s`:'E · atrae residuos cercanos'}</small>`;}$('#ocean-game').dataset.phase=phase;draw();requestAnimationFrame(frame);}requestAnimationFrame(frame);

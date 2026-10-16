@@ -1,117 +1,22 @@
 import {test,expect} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-
-async function state(page){
- return page.locator('#ocean-board').evaluate(board=>[...board.querySelectorAll('[role=gridcell]')].map(b=>({x:Number(b.dataset.x),y:Number(b.dataset.y),label:b.getAttribute('aria-label'),selected:b.getAttribute('aria-selected')==='true'})));
-}
-function route(cells,start,target){
- const blocked=new Set(cells.filter(c=>c.label.includes('Dale espacio')).map(c=>`${c.x},${c.y}`));
- const queue=[{...start,path:[]}],seen=new Set([`${start.x},${start.y}`]);
- while(queue.length){
-  const cur=queue.shift();if(cur.x===target.x&&cur.y===target.y)return cur.path;
-  for(const [key,dx,dy] of [['ArrowUp',0,-1],['ArrowDown',0,1],['ArrowLeft',-1,0],['ArrowRight',1,0]]){
-   const x=cur.x+dx,y=cur.y+dy,id=`${x},${y}`;
-   if(x<0||x>5||y<0||y>4||blocked.has(id)||seen.has(id))continue;
-   seen.add(id);queue.push({x,y,path:[...cur.path,key]});
-  }
- }
- throw Error('A game objective is unreachable');
-}
-async function collectLevel(page){
- for(let i=0;i<8;i++){
-  const cells=await state(page),target=cells.find(c=>c.label.includes('Residuo:'));
-  if(!target)return;
-  const start=cells.find(c=>c.selected);const keys=route(cells,start,target);
-  await page.locator('#ocean-board [aria-selected=true]').focus();
-  for(const key of keys)await page.keyboard.press(key);
- }
- throw Error('Level did not finish');
-}
-
-test('three complete missions, educational choices, rewards, local badges and replay',async({page})=>{
- test.setTimeout(90000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/guardianes.html');
- await page.getByRole('button',{name:'¡Vamos al mar!'}).click();
- await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','playing');
- const answers=['Botellas, bolsas y otros residuos.','Lo observo a distancia.','Con una persona adulta y protección.'];
+import {createWorld,step,WIDTH} from '../src/game/engine.js';
+test('las tres expediciones se completan pilotando, recogiendo y llegando a la salida',()=>{
  for(let level=0;level<3;level++){
-  await collectLevel(page);
-  await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','question');
-  if(level===0){const check=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(check.violations).toEqual([]);}
-  if(level===0){
-   await page.getByRole('button',{name:'Los animales que encontramos.'}).click();
-   await expect(page.locator('#question-feedback')).toContainText('Puedes intentarlo');
-  }
-  await page.getByRole('button',{name:answers[level],exact:false}).click();
-  await expect(page.locator('.ocean-fact')).toBeVisible();
-  if(level===0){const check=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(check.violations).toEqual([]);}
-  await expect(page.locator('#badge-count')).toHaveText(`${level+1} / 3`);
-  await expect(page.locator('.reward-stars')).toHaveAttribute('aria-label','3 de 3 estrellas');
-  await page.getByRole('button',{name:level===2?'Ver mi aventura':'Siguiente misión'}).click();
+ const w=createWorld(level);
+ const navigate=(x,y)=>{for(let i=0;i<3000;i++){const dx=x-w.x,dy=y-w.y;if(w.done||Math.hypot(dx,dy)<38)return;step(w,{x:Math.max(-1,Math.min(1,dx/55)),y:Math.max(-1,Math.min(1,dy/55)),sonar:true},1/60);}throw new Error('Destino inaccesible');};
+ for(const t of w.trash){navigate(t.x,t.y);expect(t.taken).toBe(true);}expect(w.done).toBe(false);navigate(WIDTH-100,270);expect(w.done).toBe(true);expect(w.collected).toBe(8);expect(w.score).toBeGreaterThanOrEqual(800);
  }
- await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','finished');
- await expect(page.locator('.final-panel')).toContainText('150 puntos');
- await expect(page.locator('.badge-collection>div')).toHaveCount(3);
- const a11y=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(a11y.violations).toEqual([]);
- await page.getByRole('button',{name:'Jugar otra aventura'}).click();
- await expect(page.locator('#game-points')).toHaveText('0');
- await expect(page.locator('#mission-number')).toHaveText('MISIÓN 1 DE 3');
- await page.reload();await expect(page.locator('#badge-count')).toHaveText('3 / 3');
- expect(errors).toEqual([]);
 });
-
-test('movement, animal protection, pause and resume preserve the mission',async({page})=>{
- await page.goto('/guardianes.html');await page.getByRole('button',{name:'¡Vamos al mar!'}).click();
- const cells=await state(page);const animal=cells.find(c=>c.label.includes('Dale espacio'));
- const adjacent={x:animal.x-1,y:animal.y};
- for(const key of route(cells,cells.find(c=>c.selected),adjacent))await page.keyboard.press(key);
- await page.keyboard.press('Control+a');
- await expect(page.locator('#ocean-board [aria-selected=true]')).toHaveAttribute('data-x',String(adjacent.x));
- const before=await page.locator('#trash-count').innerText();
- await page.keyboard.press('ArrowRight');
- await expect(page.locator('#ocean-status')).toContainText('¡Dale espacio al bufeo!');
- await expect(page.locator('#ocean-board [aria-selected=true]')).toHaveAttribute('data-x',String(adjacent.x));
- await page.getByRole('button',{name:'Pausar'}).click();
- await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','paused');
- await expect(page.getByRole('button',{name:'Mover arriba'})).toBeDisabled();
- await page.getByRole('button',{name:'Seguir explorando'}).click();
- await expect(page.locator('#trash-count')).toHaveText(before);
- await expect(page.locator('#ocean-board [aria-selected=true]')).toHaveAttribute('data-x',String(adjacent.x));
- await page.keyboard.press('Escape');await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','paused');
- await page.getByRole('button',{name:'Empezar de nuevo',exact:true}).click();
- await expect(page.locator('#ocean-board [aria-selected=true]')).toHaveAttribute('data-x','0');
- await expect(page.locator('#trash-count')).toHaveText('0 / 4');
- const fresh=await state(page);
- for(const key of route(fresh,fresh.find(c=>c.selected),adjacent))await page.keyboard.press(key);
- for(let i=0;i<3;i++)await page.keyboard.press('ArrowRight');
- await collectLevel(page);await page.getByRole('button',{name:'Botellas, bolsas y otros residuos.'}).click();
- await expect(page.locator('.reward-stars')).toHaveAttribute('aria-label','2 de 3 estrellas');
+test('el turbo consume y recupera energía, las rocas bloquean y el sonar tiene recarga',()=>{
+ const w=createWorld();for(let i=0;i<60;i++)step(w,{x:1,boost:true,sonar:true},1/60);expect(w.energy).toBeLessThan(80);expect(w.cooldown).toBeGreaterThan(5);const energy=w.energy;for(let i=0;i<60;i++)step(w,{},1/60);expect(w.energy).toBeGreaterThan(energy);
+ const r=w.rocks[0];w.x=r.x-r.r-35;w.y=r.y;for(let i=0;i<120;i++)step(w,{x:1},1/60);expect(Math.hypot(w.x-r.x,w.y-r.y)).toBeGreaterThanOrEqual(r.r+33);expect(w.hits).toBeGreaterThan(0);
 });
-
-for(const width of [320,390,1280])test(`touch controls, layout and accessibility at ${width}px`,async({page})=>{
- await page.emulateMedia({reducedMotion:'reduce'});await page.setViewportSize({width,height:900});await page.goto('/guardianes.html');
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- let results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(results.violations).toEqual([]);
- await page.getByRole('button',{name:'¡Vamos al mar!'}).click();
- await page.getByRole('button',{name:'Mover arriba'}).click();
- await expect(page.locator('#ocean-board [aria-selected=true]')).toHaveAttribute('data-y','3');
- await page.locator('#ocean-board [data-x="1"][data-y="3"]').click();
- await expect(page.locator('#ocean-board [aria-selected=true]')).toHaveAttribute('data-x','1');
- results=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(results.violations).toEqual([]);
- expect(await page.locator('.animal-tile svg').first().evaluate(el=>getComputedStyle(el).animationName)).toBe('none');
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+for(const width of [320,390,1280])test(`aventura accesible y controles continuos a ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:900});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/guardianes.html');await expect(page.locator('#start-game')).toBeVisible();expect((await new AxeBuilder({page}).include('#ocean-game').analyze()).violations).toEqual([]);
+ await page.locator('#start-game').click();await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','playing');await page.keyboard.down('ArrowRight');await page.waitForTimeout(1400);await page.keyboard.up('ArrowRight');await expect(page.locator('#trash-count')).toHaveText('1 / 8 residuos');
+ await page.keyboard.press('Escape');await expect(page.locator('#resume-game')).toBeVisible();const before=await page.locator('#game-points').textContent();await page.waitForTimeout(200);expect(await page.locator('#game-points').textContent()).toBe(before);await page.locator('#resume-game').click();
+ const boost=page.locator('#boost-game');await boost.dispatchEvent('pointerdown',{pointerId:1});await page.waitForTimeout(250);await boost.dispatchEvent('pointerup',{pointerId:1});expect(Number(await page.locator('#energy').getAttribute('value'))).toBeLessThan(100);
+ await page.locator('#pause-game').click();await page.locator('#restart-game').click();await expect(page.locator('#trash-count')).toHaveText('0 / 8 residuos');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect((await new AxeBuilder({page}).include('#ocean-game').analyze()).violations).toEqual([]);expect(errors).toEqual([]);
 });
-
-test('blocked or corrupt browser storage does not prevent playing',async({page})=>{
- await page.addInitScript(()=>{Storage.prototype.getItem=()=>{throw Error('Storage blocked')};Storage.prototype.setItem=()=>{throw Error('Storage blocked')};});
- await page.goto('/guardianes.html');await expect(page.locator('#badge-count')).toHaveText('0 / 3');
- await page.getByRole('button',{name:'¡Vamos al mar!'}).click();await collectLevel(page);
- await page.getByRole('button',{name:'Botellas, bolsas y otros residuos.'}).click();
- await expect(page.locator('#next-mission')).toBeVisible();
-});
-
-test('game can be discovered from the existing games section',async({page})=>{
- await page.goto('/juegos.html');await page.getByRole('link',{name:/NUEVO · VIDEOJUEGO PARA NIÑOS/}).click();
- await expect(page).toHaveURL(/guardianes.html$/);
- await expect(page.getByRole('button',{name:'¡Vamos al mar!'})).toBeVisible();
-});
+test('el juego funciona con el almacenamiento bloqueado y se descubre desde juegos',async({page})=>{await page.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked');}});});await page.goto('/juegos.html');await page.locator('a[href="./guardianes.html"]').click();await page.locator('#start-game').click();await expect(page.locator('#ocean-game')).toHaveAttribute('data-phase','playing');});
