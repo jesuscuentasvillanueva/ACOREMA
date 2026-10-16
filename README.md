@@ -1,6 +1,6 @@
 # ACOREMA — web en español
 
-Rediseño adaptable de la web de ACOREMA con su emblema oficial, fotografías y contenido institucional. Incluye portada y 28 páginas adicionales: 26 páginas migradas del sitio en español, juegos accesibles y créditos. Vite, JavaScript y CSS; no requiere backend ni secretos.
+Rediseño adaptable de la web de ACOREMA con su emblema oficial, fotografías y contenido institucional. Incluye portada y 29 páginas adicionales: 26 páginas migradas del sitio en español, juegos educativos, el videojuego Misión Océano y créditos. Vite, JavaScript y CSS; no requiere backend ni secretos.
 
 ## Desarrollo
 
@@ -35,7 +35,7 @@ npm run build
 npm test
 ```
 
-La compilación genera primero las páginas y crea el sitio estático en `dist/`. `npm run preview` sirve esa compilación. Las trece pruebas verifican identidad, navegación entre páginas, enlaces e imágenes internos, pantallas de 320 px sin desbordamiento, búsqueda y filtros, galería con teclado, contacto, audio reproducible, memoria completa y puntuación del cuestionario. También se comprueban las pestañas de especies con teclado, las recomendaciones según el visitante, las preguntas frecuentes, el buscador global, el atajo Ctrl/Cmd+K, el retorno del foco y la recuperación tras un fallo de red. Axe revisa nueve tipos de página en escritorio y móvil, además del diálogo de búsqueda. La revisión automática no certifica por sí sola conformidad completa con WCAG; no incluye una auditoría manual con lectores de pantalla ni transcripciones de los audios originales.
+La compilación genera primero las páginas y crea el sitio estático en `dist/`. `npm run preview` sirve esa compilación. Las veinte pruebas verifican identidad, navegación entre páginas, enlaces e imágenes internos, pantallas de 320 px sin desbordamiento, búsqueda y filtros, galería con teclado, contacto, audio reproducible, memoria completa y puntuación del cuestionario. También se comprueban las pestañas de especies con teclado, las recomendaciones según el visitante, las preguntas frecuentes, el buscador global, el atajo Ctrl/Cmd+K, el retorno del foco y la recuperación tras un fallo de red. Axe revisa nueve tipos de página en escritorio y móvil, además del diálogo de búsqueda. La revisión automática no certifica por sí sola conformidad completa con WCAG; no incluye una auditoría manual con lectores de pantalla ni transcripciones de los audios originales.
 
 Playwright usa `/usr/bin/chromium` cuando existe. En otros equipos ejecutar `npx playwright install chromium` o indicar `PLAYWRIGHT_CHROMIUM_EXECUTABLE`.
 
@@ -44,3 +44,11 @@ Playwright usa `/usr/bin/chromium` cuando existe. En otros equipos ejecutar `npx
 `.github/workflows/deploy-pages.yml` instala, compila, prueba y despliega cada actualización de `main` en GitHub Pages. En el repositorio, la fuente de Pages debe ser **GitHub Actions**. Las rutas relativas admiten `/ACOREMA/`. La URL de producción es `https://jesuscuentasvillanueva.github.io/ACOREMA/`.
 
 Fuentes: DM Sans y Manrope mediante Fontsource, con licencias incluidas en sus paquetes. Identidad, fotografías, documentos y audios: ACOREMA y los titulares indicados en los materiales. El sitio no incorpora seguimiento ni recoge formularios personales.
+
+## Misión Océano
+
+`guardianes.html` se genera a partir de `content/ocean-game.html`. La lógica, los niveles, las ilustraciones SVG y los estilos están en `src/game/`. No utiliza un motor externo ni requiere cuentas, servicios o claves. El juego tiene tres misiones con cuatro, cinco y seis residuos, controles con teclado, casillas y botones táctiles; cada misión termina con una pregunta educativa y una insignia. Los animales bloquean su casilla: el jugador debe rodearlos, no recogerlos. El sonido se activa solo si se solicita. Se puede pausar, reiniciar y volver a jugar, sin cronómetro.
+
+Las mejores estrellas de las tres insignias se guardan únicamente en `localStorage` bajo `acorema-ocean-badges-v1`. No se guardan nombres ni se transmite el progreso. El juego sigue funcionando si el almacenamiento está bloqueado. Las ilustraciones son originales para el videojuego y representan un entorno simplificado, no fotografías o registros de campo.
+
+Las pruebas del videojuego completan las tres misiones mediante controles reales, evitan animales, comprueban preguntas incorrectas y correctas, recompensas, persistencia, repetición, pausa, reinicio, controles móviles y almacenamiento bloqueado. Axe revisa el inicio, el tablero, una pregunta, una recompensa y el final; también se comprueban pantallas de 320, 390 y 1280 píxeles y movimiento reducido. La revisión automática no sustituye una prueba de uso con niños y tecnologías de asistencia.

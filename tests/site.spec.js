@@ -23,7 +23,7 @@ test('official identity, real navigation and keyboard dialog',async({page})=>{
 
 test('all pages load, all internal links and images exist, mobile layouts fit',async({page,request})=>{
  const localLinks=new Set();const assets=new Set();
- for(const slug of ['index',...pages.map(p=>p.slug),'juegos','fuentes']){
+ for(const slug of ['index',...pages.map(p=>p.slug),'juegos','fuentes','guardianes']){
   const response=await page.goto(`/${slug}.html`);
   expect(response.status(),slug).toBe(200);
   await expect(page.locator('h1')).toHaveCount(1);

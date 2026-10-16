@@ -70,7 +70,7 @@ tabs.forEach((tab, index) => {
 const journeys = {
   curious: {status: 'Ideas para empezar a conocer nuestro mar.', cards: [
     ['01 / OBSERVA', 'Un mar de vida, en imágenes.', 'Conoce la biodiversidad de la costa a través del archivo de ACOREMA.', './galeria.html'],
-    ['02 / JUEGA', 'La curiosidad también se juega.', 'Descubre especies y pon a prueba lo que sabes con nuestras actividades.', './juegos.html']
+    ['02 / JUEGA', 'Tu primera misión por el mar.', 'Explora en un minisubmarino, recoge residuos y deja espacio a los animales.', './guardianes.html']
   ]},
   teacher: {status: 'Recursos para acercar el mar a tu aula.', cards: [
     ['01 / COMPARTE', 'Lleva el océano a tu clase.', 'Encuentra guías, cartillas y publicaciones de ACOREMA para escolares y docentes.', './materiales.html'],
